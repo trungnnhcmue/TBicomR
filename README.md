@@ -1,4 +1,4 @@
-This code associated with the paper 'TBicomR: Event Prediction in Temporal Knowledge Graphs with Bicomplex Rotation,' currently under review.
+This code associated with the paper 'TBicomR: Event Prediction in Temporal Knowledge Graphs with Bicomplex Rotation'
 
 # Knowledge Base Completion (kbc)
 This code reproduces results in [Tensor Decompositions for Temporal Knowledge Base Completion](https://arxiv.org/abs/2004.04926) (ICLR 2020).
