@@ -11,13 +11,13 @@ from collections import defaultdict
 PATH = './tkbc/output_240820/'
 
 parser = argparse.ArgumentParser(
-    description="TBicomR Evaluator"
+    description="BiTComplEx Evaluator"
 )
 parser.add_argument(
     '--skip_training', default=False, action="store_true"
 )
 parser.add_argument(
-    '--model', default='TBicomR', type=str
+    '--model', default='BiTComplEx', type=str
 )
 
 args = parser.parse_args()

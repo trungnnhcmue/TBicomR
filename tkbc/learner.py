@@ -16,7 +16,7 @@ import pickle
 
 from datasets import TemporalDataset
 from optimizers import TKBCOptimizer, IKBCOptimizer
-from models import ComplEx, TComplEx, TNTComplEx, TBicomR
+from models import ComplEx, TComplEx, TNTComplEx, BiTComplEx
 from regularizers import N3, Lambda3, DURA
 from utils import load_model, save_model, set_seed
 
@@ -28,7 +28,7 @@ parser.add_argument(
     help="Dataset name"
 )
 models = [
-    'ComplEx', 'TComplEx', 'TNTComplEx', 'TBicomR'
+    'ComplEx', 'TComplEx', 'TNTComplEx', 'BiTComplEx'
 ]
 parser.add_argument(
     '--model', choices=models,
@@ -90,7 +90,7 @@ model = {
     'ComplEx': ComplEx(sizes, args.rank),
     'TComplEx': TComplEx(sizes, args.rank, no_time_emb=args.no_time_emb),
     'TNTComplEx': TNTComplEx(sizes, args.rank, no_time_emb=args.no_time_emb),
-    'TBicomR': TBicomR(sizes, args.rank),    
+    'BiTComplEx': BiTComplEx(sizes, args.rank)
 }[args.model]
 model = model.cuda()
 

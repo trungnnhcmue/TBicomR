@@ -225,34 +225,255 @@ class ComplEx(TKBCModel):
             lhs[0] * rel[1] + lhs[1] * rel[0]
         ], 1)
     
-   
-class TBicomR(TKBCModel):
+class BiComplEx(TKBCModel):
     def __init__(self, sizes: Tuple[int, int, int], rank: int, init_size: float = 1e-3):
-        super(TBicomR, self).__init__()
-        #available when pass some round
+        super(BiComplEx, self).__init__()
+        self.sizes = sizes
+        self.rank = rank
+        self.embeddings = nn.ModuleList([nn.Embedding(s, 4 * rank, sparse=True) for s in sizes[:2]])
+        self.embeddings[0].weight.data *= init_size
+        self.embeddings[1].weight.data *= init_size
+
+    @staticmethod
+    def has_time():
+        return False
+
+    def forward_over_time(self, x):
+        raise NotImplementedError("no.")
+
+    def score(self, x):
+        head_e = self.embeddings[0](x[:, 0])
+        rel_e = self.embeddings[1](x[:, 1])
+        tail_e = self.embeddings[0](x[:, 2])
+
+        head_e = head_e[:, :self.rank], head_e[:, self.rank:2*self.rank], head_e[:, 2*self.rank:3*self.rank], head_e[:, 3*self.rank:]
+        rel_e = rel_e[:, :self.rank], rel_e[:, self.rank:2*self.rank], rel_e[:, 2*self.rank:3*self.rank], rel_e[:, 3*self.rank:]
+        tail_e = tail_e[:, :self.rank], tail_e[:, self.rank:2*self.rank], tail_e[:, 2*self.rank:3*self.rank], tail_e[:, 3*self.rank:]
+        
+#         score_1 = torch.sum(
+#             (head_e[0] * rel_e[0] - head_e[1] * rel_e[1]) +
+#             (head_e[0] * rel_e[1] + head_e[1] * rel_e[0]), 1, keepdim=True)
+#         score_2 = torch.sum(
+#             (head_e[2] * rel_e[2] - head_e[3] * rel_e[3]) +
+#             (head_e[2] * rel_e[3] + head_e[3] * rel_e[2]), 1, keepdim=True)
+#         score_3 = torch.sum(
+#             (head_e[0] * rel_e[2] - head_e[1] * rel_e[3]) +
+#             (head_e[0] * rel_e[3] + head_e[1] * rel_e[2]), 1, keepdim=True)
+#         score_4 = torch.sum(
+#             (head_e[2] * rel_e[0] - head_e[3] * rel_e[1]) +
+#             (head_e[2] * rel_e[1] + head_e[3] * rel_e[0]), 1, keepdim=True)
+        score_1 = (head_e[0] * rel_e[0] - head_e[1] * rel_e[1]) + (head_e[0] * rel_e[1] + head_e[1] * rel_e[0])
+        score_2 = (head_e[2] * rel_e[2] - head_e[3] * rel_e[3]) + (head_e[2] * rel_e[3] + head_e[3] * rel_e[2])
+        score_3 = (head_e[0] * rel_e[2] - head_e[1] * rel_e[3]) + (head_e[0] * rel_e[3] + head_e[1] * rel_e[2])
+        score_4 = (head_e[2] * rel_e[0] - head_e[3] * rel_e[1]) + (head_e[2] * rel_e[1] + head_e[3] * rel_e[0])
+        return torch.sum(score_1*tail_e[0] - score_2*tail_e[1] + score_3*tail_e[2] + score_4*tail_e[3], 1, keepdim=True)
+
+#         score_1 = torch.sum(
+#             (head_e[0] * rel_e[0] - head_e[1] * rel_e[1]) * tail_e[0] +
+#             (head_e[0] * rel_e[1] + head_e[1] * rel_e[0]) * tail_e[0], 1, keepdim=True)
+#         score_2 = torch.sum(
+#             (head_e[2] * rel_e[2] - head_e[3] * rel_e[3]) * tail_e[1] +
+#             (head_e[2] * rel_e[3] + head_e[3] * rel_e[2]) * tail_e[1], 1, keepdim=True)
+#         score_3 = torch.sum(
+#             (head_e[0] * rel_e[2] - head_e[1] * rel_e[3]) * tail_e[2] +
+#             (head_e[0] * rel_e[3] + head_e[1] * rel_e[2]) * tail_e[2], 1, keepdim=True)
+#         score_4 = torch.sum(
+#             (head_e[2] * rel_e[0] - head_e[3] * rel_e[1]) * tail_e[3] +
+#             (head_e[2] * rel_e[1] + head_e[3] * rel_e[0]) * tail_e[3], 1, keepdim=True)
+#         return torch.sum(score_1 - score_2 + score_3 + score_4, 1, keepdim=True)
+
+    def forward(self, x):
+        head_e = self.embeddings[0](x[:, 0])
+        rel_e = self.embeddings[1](x[:, 1])
+        tail_e = self.embeddings[0](x[:, 2])
+
+        head_e = head_e[:, :self.rank], head_e[:, self.rank:2*self.rank], head_e[:, 2*self.rank:3*self.rank], head_e[:, 3*self.rank:]
+        rel_e = rel_e[:, :self.rank], rel_e[:, self.rank:2*self.rank], rel_e[:, 2*self.rank:3*self.rank], rel_e[:, 3*self.rank:]
+        tail_e = tail_e[:, :self.rank], tail_e[:, self.rank:2*self.rank], tail_e[:, 2*self.rank:3*self.rank], tail_e[:, 3*self.rank:]
+
+        to_score = self.embeddings[0].weight
+        to_score = to_score[:, :self.rank], to_score[:, self.rank:2*self.rank], to_score[:, 2*self.rank:3*self.rank], to_score[:, 3*self.rank:]
+        
+        return (
+            (head_e[0] * rel_e[0] - head_e[1] * rel_e[1]) @ to_score[0].transpose(0, 1) +
+            (head_e[0] * rel_e[1] + head_e[1] * rel_e[0]) @ to_score[0].transpose(0, 1) -
+            (head_e[2] * rel_e[2] - head_e[3] * rel_e[3]) @ to_score[1].transpose(0, 1) -
+            (head_e[2] * rel_e[3] + head_e[3] * rel_e[2]) @ to_score[1].transpose(0, 1) +
+            (head_e[0] * rel_e[2] - head_e[1] * rel_e[3]) @ to_score[2].transpose(0, 1) +
+            (head_e[0] * rel_e[3] + head_e[1] * rel_e[2]) @ to_score[2].transpose(0, 1) +
+            (head_e[2] * rel_e[0] - head_e[3] * rel_e[1]) @ to_score[3].transpose(0, 1) +
+            (head_e[2] * rel_e[1] + head_e[3] * rel_e[0]) @ to_score[3].transpose(0, 1)
+        ), (
+            torch.sqrt(head_e[0] ** 2 + head_e[1] ** 2 + head_e[2] ** 2 + head_e[3] ** 2),
+            torch.sqrt(rel_e[0] ** 2 + rel_e[1] ** 2 + rel_e[2] ** 2 + rel_e[3] ** 2),
+            torch.sqrt(tail_e[0] ** 2 + tail_e[1] ** 2 + tail_e[2] ** 2 + tail_e[3] ** 2)
+        )
+
+    def get_rhs(self, chunk_begin: int, chunk_size: int):
+        return self.embeddings[0].weight.data[chunk_begin:chunk_begin + chunk_size].transpose(0, 1)
+
+    def get_queries(self, queries: torch.Tensor):
+        head_e = self.embeddings[0](queries[:, 0])
+        rel_e = self.embeddings[1](queries[:, 1])
+        
+        head_e = head_e[:, :self.rank], head_e[:, self.rank:2*self.rank], head_e[:, 2*self.rank:3*self.rank], head_e[:, 3*self.rank:]
+        rel_e = rel_e[:, :self.rank], rel_e[:, self.rank:2*self.rank], rel_e[:, 2*self.rank:3*self.rank], rel_e[:, 3*self.rank:]
+
+        score_1 = torch.cat([
+            head_e[0] * rel_e[0] - head_e[1] * rel_e[1],
+            head_e[0] * rel_e[1] + head_e[1] * rel_e[0]
+        ], 1)
+        score_2 = torch.cat([
+            head_e[2] * rel_e[2] - head_e[3] * rel_e[3],
+            head_e[2] * rel_e[3] + head_e[3] * rel_e[2]
+        ], 1)
+        score_3 = torch.cat([
+            head_e[0] * rel_e[2] - head_e[1] * rel_e[3],
+            head_e[0] * rel_e[3] + head_e[1] * rel_e[2]
+        ], 1)
+        score_4 = torch.cat([
+            head_e[2] * rel_e[0] - head_e[3] * rel_e[1],
+            head_e[2] * rel_e[1] + head_e[3] * rel_e[0]
+        ], 1)
+        return torch.cat([score_1 - score_2, score_3 + score_4], 1)
+    
+class BiTComplEx(TKBCModel):
+    def __init__(self, sizes: Tuple[int, int, int], rank: int, init_size: float = 1e-3):
+        super(BiTComplEx, self).__init__()
+        self.sizes = sizes
+        self.rank = rank
+        self.embeddings = nn.ModuleList([nn.Embedding(s, 4 * rank, sparse=True) for s in [sizes[0], sizes[1], sizes[3]]])
+        self.embeddings[0].weight.data *= init_size
+        self.embeddings[1].weight.data *= init_size
+        self.embeddings[2].weight.data *= init_size
+        self.loss_fn = torch.nn.CrossEntropyLoss(reduction='mean')
     
     def loss(self, *args, **kwargs):
         return self.loss_fn(*args, **kwargs)
 
     def score(self, x):
-        #available when pass some round
+        head_e = self.embeddings[0](x[:, 0])
+        rel_e = self.embeddings[1](x[:, 1])
+        tail_e = self.embeddings[0](x[:, 2])
+        time_e = self.embeddings[2](x[:, 3])
+        time_e = time_e[:, :self.rank], time_e[:, self.rank:2*self.rank], time_e[:, 2*self.rank:3*self.rank], time_e[:, 3*self.rank:]
+        
+        head_e = head_e[:, :self.rank], head_e[:, self.rank:2*self.rank], head_e[:, 2*self.rank:3*self.rank], head_e[:, 3*self.rank:]
+        rel_e = rel_e[:, :self.rank], rel_e[:, self.rank:2*self.rank], rel_e[:, 2*self.rank:3*self.rank], rel_e[:, 3*self.rank:]
+        tail_e = tail_e[:, :self.rank], tail_e[:, self.rank:2*self.rank], tail_e[:, 2*self.rank:3*self.rank], tail_e[:, 3*self.rank:]
+        full_rel =  rel_e[0] * time_e[0] - rel_e[1] * time_e[1] + rel_e[0] * time_e[1] + rel_e[1] * time_e[0], \
+                    rel_e[2] * time_e[2] + rel_e[3] * time_e[3] + rel_e[2] * time_e[3] + rel_e[3] * time_e[2], \
+                    rel_e[0] * time_e[2] - rel_e[1] * time_e[3] + rel_e[0] * time_e[3] + rel_e[1] * time_e[2], \
+                    rel_e[2] * time_e[0] + rel_e[3] * time_e[1] + rel_e[2] * time_e[1] + rel_e[3] * time_e[0]
+
+        score_1 = (head_e[0] * full_rel[0] - head_e[1] * full_rel[1]) + (head_e[0] * full_rel[1] + head_e[1] * full_rel[0])
+        score_2 = (head_e[2] * full_rel[2] - head_e[3] * full_rel[3]) + (head_e[2] * full_rel[3] + head_e[3] * full_rel[2])
+        score_3 = (head_e[0] * full_rel[2] - head_e[1] * full_rel[3]) + (head_e[0] * full_rel[3] + head_e[1] * full_rel[2])
+        score_4 = (head_e[2] * full_rel[0] - head_e[3] * full_rel[1]) + (head_e[2] * full_rel[1] + head_e[3] * full_rel[0])
+        return torch.sum(score_1*tail_e[0] - score_2*tail_e[1] + score_3*tail_e[2] + score_4*tail_e[3], 1, keepdim=True)
     
     def forward_over_time(self, x: torch.Tensor):
-        #available when pass some round
+        head_e = self.embeddings[0](x[:, 0])
+        rel_e = self.embeddings[1](x[:, 1])
+        tail_e = self.embeddings[0](x[:, 2])
+        time_e = self.embeddings[2].weight
+        time_e = time_e[:, :self.rank], time_e[:, self.rank:2*self.rank], time_e[:, 2*self.rank:3*self.rank], time_e[:, 3*self.rank:]
         
+        head_e = head_e[:, :self.rank], head_e[:, self.rank:2*self.rank], head_e[:, 2*self.rank:3*self.rank], head_e[:, 3*self.rank:]
+        rel_e = rel_e[:, :self.rank], rel_e[:, self.rank:2*self.rank], rel_e[:, 2*self.rank:3*self.rank], rel_e[:, 3*self.rank:]
+        tail_e = tail_e[:, :self.rank], tail_e[:, self.rank:2*self.rank], tail_e[:, 2*self.rank:3*self.rank], tail_e[:, 3*self.rank:]
+       
+        full_rel =  rel_e[0] * tail_e[0] - rel_e[1] * tail_e[1] + rel_e[0] * tail_e[1] + rel_e[1] * tail_e[0], \
+                    rel_e[2] * tail_e[2] + rel_e[3] * tail_e[3] + rel_e[2] * tail_e[3] + rel_e[3] * tail_e[2], \
+                    rel_e[0] * tail_e[2] - rel_e[1] * tail_e[3] + rel_e[0] * tail_e[3] + rel_e[1] * tail_e[2], \
+                    rel_e[2] * tail_e[0] + rel_e[3] * tail_e[1] + rel_e[2] * tail_e[1] + rel_e[3] * tail_e[0]
+
+        return (
+
+            (head_e[0] * full_rel[0] - head_e[1] * full_rel[1]) @ time_e[0].transpose(0, 1) +
+            (head_e[0] * full_rel[1] + head_e[1] * full_rel[0]) @ time_e[0].transpose(0, 1) -
+            (head_e[2] * full_rel[2] - head_e[3] * full_rel[3]) @ time_e[1].transpose(0, 1) -
+            (head_e[2] * full_rel[3] + head_e[3] * full_rel[2]) @ time_e[1].transpose(0, 1) +
+            (head_e[0] * full_rel[2] - head_e[1] * full_rel[3]) @ time_e[2].transpose(0, 1) +
+            (head_e[0] * full_rel[3] + head_e[1] * full_rel[2]) @ time_e[2].transpose(0, 1) +
+            (head_e[2] * full_rel[0] - head_e[3] * full_rel[1]) @ time_e[3].transpose(0, 1) +
+            (head_e[2] * full_rel[1] + head_e[3] * full_rel[0]) @ time_e[3].transpose(0, 1)
+        )
 
     def forward(self, x):
-        #available when pass some round
+        head_e = self.embeddings[0](x[:, 0])
+        rel_e = self.embeddings[1](x[:, 1])
+        tail_e = self.embeddings[0](x[:, 2])
+        time_e = self.embeddings[2](x[:, 3])
+        time_e = time_e[:, :self.rank], time_e[:, self.rank:2*self.rank], time_e[:, 2*self.rank:3*self.rank], time_e[:, 3*self.rank:]
+        
+        head_e = head_e[:, :self.rank], head_e[:, self.rank:2*self.rank], head_e[:, 2*self.rank:3*self.rank], head_e[:, 3*self.rank:]
+        rel_e = rel_e[:, :self.rank], rel_e[:, self.rank:2*self.rank], rel_e[:, 2*self.rank:3*self.rank], rel_e[:, 3*self.rank:]
+        tail_e = tail_e[:, :self.rank], tail_e[:, self.rank:2*self.rank], tail_e[:, 2*self.rank:3*self.rank], tail_e[:, 3*self.rank:]
+
+        to_score = self.embeddings[0].weight
+        to_score = to_score[:, :self.rank], to_score[:, self.rank:2*self.rank], to_score[:, 2*self.rank:3*self.rank], to_score[:, 3*self.rank:]
+
+        full_rel =  rel_e[0] * time_e[0] - rel_e[1] * time_e[1] + rel_e[0] * time_e[1] + rel_e[1] * time_e[0], \
+                    rel_e[2] * time_e[2] + rel_e[3] * time_e[3] + rel_e[2] * time_e[3] + rel_e[3] * time_e[2], \
+                    rel_e[0] * time_e[2] - rel_e[1] * time_e[3] + rel_e[0] * time_e[3] + rel_e[1] * time_e[2], \
+                    rel_e[2] * time_e[0] + rel_e[3] * time_e[1] + rel_e[2] * time_e[1] + rel_e[3] * time_e[0]
+
+        return (
+
+            (head_e[0] * full_rel[0] - head_e[1] * full_rel[1]) @ to_score[0].transpose(0, 1) +
+            (head_e[0] * full_rel[1] + head_e[1] * full_rel[0]) @ to_score[0].transpose(0, 1) -
+            (head_e[2] * full_rel[2] - head_e[3] * full_rel[3]) @ to_score[1].transpose(0, 1) -
+            (head_e[2] * full_rel[3] + head_e[3] * full_rel[2]) @ to_score[1].transpose(0, 1) +
+            (head_e[0] * full_rel[2] - head_e[1] * full_rel[3]) @ to_score[2].transpose(0, 1) +
+            (head_e[0] * full_rel[3] + head_e[1] * full_rel[2]) @ to_score[2].transpose(0, 1) +
+            (head_e[2] * full_rel[0] - head_e[3] * full_rel[1]) @ to_score[3].transpose(0, 1) +
+            (head_e[2] * full_rel[1] + head_e[3] * full_rel[0]) @ to_score[3].transpose(0, 1)
+        ), (
+            torch.sqrt(head_e[0] ** 2 + head_e[1] ** 2 + head_e[2] ** 2 + head_e[3] ** 2),
+            torch.sqrt(full_rel[0] ** 2 + full_rel[1] ** 2 + full_rel[2] ** 2 + full_rel[3] ** 2),
+            torch.sqrt(tail_e[0] ** 2 + tail_e[1] ** 2 + tail_e[2] ** 2 + tail_e[3] ** 2),
+        ), self.embeddings[2].weight
 
     def get_rhs(self, chunk_begin: int, chunk_size: int):
-        #available when pass some round
+        return self.embeddings[0].weight.data[chunk_begin:chunk_begin + chunk_size].transpose(0, 1)
     
     @staticmethod
     def has_time():
         return True
 
     def get_queries(self, queries: torch.Tensor):
-       #available when pass some round
+        head_e = self.embeddings[0](queries[:, 0])
+        rel_e = self.embeddings[1](queries[:, 1])
+        time_e = self.embeddings[2](queries[:, 3])
+        time_e = time_e[:, :self.rank], time_e[:, self.rank:2*self.rank], time_e[:, 2*self.rank:3*self.rank], time_e[:, 3*self.rank:]
+        
+        head_e = head_e[:, :self.rank], head_e[:, self.rank:2*self.rank], head_e[:, 2*self.rank:3*self.rank], head_e[:, 3*self.rank:]
+        rel_e = rel_e[:, :self.rank], rel_e[:, self.rank:2*self.rank], rel_e[:, 2*self.rank:3*self.rank], rel_e[:, 3*self.rank:]
+
+        full_rel =  rel_e[0] * time_e[0] - rel_e[1] * time_e[1] + rel_e[0] * time_e[1] + rel_e[1] * time_e[0], \
+                    rel_e[2] * time_e[2] + rel_e[3] * time_e[3] + rel_e[2] * time_e[3] + rel_e[3] * time_e[2], \
+                    rel_e[0] * time_e[2] - rel_e[1] * time_e[3] + rel_e[0] * time_e[3] + rel_e[1] * time_e[2], \
+                    rel_e[2] * time_e[0] + rel_e[3] * time_e[1] + rel_e[2] * time_e[1] + rel_e[3] * time_e[0]
+
+        score_1 = torch.cat([
+            head_e[0] * full_rel[0] - head_e[1] * full_rel[1],
+            head_e[0] * full_rel[1] + head_e[1] * full_rel[0]
+        ], 1)
+        score_2 = torch.cat([
+            head_e[2] * full_rel[2] - head_e[3] * full_rel[3],
+            head_e[2] * full_rel[3] + head_e[3] * full_rel[2]
+        ], 1)
+        score_3 = torch.cat([
+            head_e[0] * full_rel[2] - head_e[1] * full_rel[3],
+            head_e[0] * full_rel[3] + head_e[1] * full_rel[2]
+        ], 1)
+        score_4 = torch.cat([
+            head_e[2] * full_rel[0] - head_e[3] * full_rel[1],
+            head_e[2] * full_rel[1] + head_e[3] * full_rel[0]
+        ], 1)
+
+        return torch.cat([score_1 - score_2, score_3 + score_4], 1)
 
 class TComplEx(TKBCModel):
     def __init__(
